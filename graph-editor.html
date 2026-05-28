@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌸 Graph Editor - 小白</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --pink-100: #fce4ec;
+            --pink-200: #f8bbd0;
+            --pink-300: #f48fb1;
+            --pink-400: #f06292;
+            --pink-500: #ec407a;
+            --pink-600: #e91e63;
+            --white: #ffffff;
+            --gray-50: #fafafa;
+            --gray-100: #f5f5f5;
+            --gray-200: #eeeeee;
+            --gray-400: #bdbdbd;
+            --gray-600: #757575;
+            --gray-800: #424242;
+            --shadow: 0 4px 24px rgba(233, 30, 99, 0.12);
+            --shadow-hover: 0 8px 32px rgba(233, 30, 99, 0.2);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', sans-serif;
+            background: var(--gray-50);
+            color: var(--gray-800);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, var(--pink-400), var(--pink-600));
+            color: var(--white);
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: var(--shadow);
+            z-index: 10;
+        }
+
+        .header h1 {
+            font-size: 1.2em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 6px 14px;
+            border: 2px solid rgba(255,255,255,0.4);
+            background: rgba(255,255,255,0.15);
+            color: var(--white);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85em;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .btn:hover {
+            background: rgba(255,255,255,0.3);
+            border-color: rgba(255,255,255,0.6);
+        }
+
+        .btn.active {
+            background: var(--white);
+            color: var(--pink-600);
+            border-color: var(--white);
+        }
+
+        .divider {
+            width: 1px;
+            height: 24px;
+            background: rgba(255,255,255,0.3);
+            margin: 0 4px;
+        }
+
+        /* Canvas Area */
+        .canvas-wrap {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            background:
+                radial-gradient(circle, var(--gray-200) 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+
+        svg#graph {
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+        }
+
+        svg#graph.panning {
+            cursor: grabbing;
+        }
+
+        svg#graph.connecting {
+            cursor: crosshair;
+        }
+
+        /* SVG styles */
+        .edge {
+            stroke: var(--gray-400);
+            stroke-width: 2;
+            fill: none;
+            transition: stroke 0.2s;
+        }
+
+        .edge:hover {
+            stroke: var(--pink-400);
+            stroke-width: 3;
+        }
+
+        .edge.selected {
+            stroke: var(--pink-500);
+            stroke-width: 3;
+        }
+
+        .temp-edge {
+            stroke: var(--pink-300);
+            stroke-width: 2;
+            fill: none;
+            stroke-dasharray: 6 4;
+            pointer-events: none;
+        }
+
+        .node-group {
+            cursor: pointer;
+        }
+
+        .node-circle {
+            fill: var(--white);
+            stroke: var(--pink-300);
+            stroke-width: 2.5;
+            transition: fill 0.2s, stroke 0.2s, filter 0.2s;
+        }
+
+        .node-group:hover .node-circle {
+            stroke: var(--pink-500);
+            filter: drop-shadow(0 2px 8px rgba(233,30,99,0.2));
+        }
+
+        .node-group.selected .node-circle {
+            stroke: var(--pink-600);
+            stroke-width: 3;
+            fill: var(--pink-100);
+            filter: drop-shadow(0 4px 12px rgba(233,30,99,0.3));
+        }
+
+        .node-label {
+            fill: var(--gray-800);
+            font-size: 12px;
+            font-weight: 600;
+            text-anchor: middle;
+            dominant-baseline: middle;
+            pointer-events: none;
+        }
+
+        /* Status bar */
+        .status {
+            background: var(--white);
+            border-top: 1px solid var(--gray-200);
+            padding: 6px 20px;
+            font-size: 0.8em;
+            color: var(--gray-600);
+            display: flex;
+            gap: 20px;
+        }
+
+        .status span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* Help overlay */
+        .help-overlay {
+            position: absolute;
+            bottom: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--white);
+            padding: 12px 20px;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            font-size: 0.85em;
+            color: var(--gray-600);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .help-overlay.show {
+            opacity: 1;
+        }
+
+        .help-overlay kbd {
+            background: var(--gray-100);
+            border: 1px solid var(--gray-200);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: var(--gray-800);
+        }
+
+        /* Minimap */
+        .minimap {
+            position: absolute;
+            bottom: 50px;
+            right: 16px;
+            width: 160px;
+            height: 100px;
+            background: var(--white);
+            border: 1px solid var(--gray-200);
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            z-index: 5;
+        }
+
+        .minimap svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .minimap-viewport {
+            fill: rgba(233, 30, 99, 0.08);
+            stroke: var(--pink-400);
+            stroke-width: 1;
+        }
+
+        .minimap-node {
+            fill: var(--pink-300);
+        }
+
+        .minimap-edge {
+            stroke: var(--gray-400);
+            stroke-width: 0.5;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>🔮 Graph Editor</h1>
+        <div class="toolbar">
+            <button class="btn active" id="btnSelect" onclick="setMode('select')">🖱️ 选择</button>
+            <button class="btn" id="btnConnect" onclick="setMode('connect')">🔗 连线</button>
+            <div class="divider"></div>
+            <button class="btn" onclick="addNode()">➕ 节点</button>
+            <button class="btn" onclick="addCluster()">🌸 簇</button>
+            <button class="btn" onclick="clearAll()">🗑️ 清空</button>
+            <div class="divider"></div>
+            <button class="btn" onclick="autoLayout()">⚡ 自动布局</button>
+            <button class="btn" onclick="centerView()">🎯 居中</button>
+        </div>
+    </div>
+
+    <div class="canvas-wrap" id="canvasWrap">
+        <svg id="graph">
+            <defs>
+                <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+                    <polygon points="0 0, 10 3.5, 0 7" fill="var(--gray-400)" />
+                </marker>
+            </defs>
+            <g id="viewport">
+                <g id="edges"></g>
+                <g id="tempEdge"></g>
+                <g id="nodes"></g>
+            </g>
+        </svg>
+
+        <div class="minimap" id="minimap">
+            <svg id="minimapSvg">
+                <rect class="minimap-viewport" id="minimapViewport" x="0" y="0" width="160" height="100"/>
+            </svg>
+        </div>
+
+        <div class="help-overlay" id="help">
+            <kbd>双击</kbd> 空白处添加节点 · <kbd>拖拽</kbd> 移动节点 · <kbd>Delete</kbd> 删除选中 · <kbd>中键/空格+拖拽</kbd> 平移
+        </div>
+    </div>
+
+    <div class="status">
+        <span>🟢 节点: <b id="nodeCount">0</b></span>
+        <span>🔗 连线: <b id="edgeCount">0</b></span>
+        <span id="modeLabel">🖱️ 模式: 选择</span>
+        <span id="selectedLabel">未选中</span>
+    </div>
+
+    <script>
+    // ── State ──
+    let nodes = [];
+    let edges = [];
+    let nextId = 1;
+    let mode = 'select'; // 'select' | 'connect'
+    let selectedNode = null;
+    let selectedEdge = null;
+    let connectFrom = null;
+    let dragging = null;
+    let panning = false;
+    let panStart = {x:0, y:0};
+    let viewOffset = {x:0, y:0};
+    let spaceDown = false;
+
+    const svg = document.getElementById('graph');
+    const viewport = document.getElementById('viewport');
+    const nodesG = document.getElementById('nodes');
+    const edgesG = document.getElementById('edges');
+    const tempEdgeG = document.getElementById('tempEdge');
+    const help = document.getElementById('help');
+
+    // ── Init ──
+    function init() {
+        // Add sample nodes
+        const samples = [
+            {label:'小白', x:400, y:300, r:36},
+            {label:'Sky', x:550, y:200, r:32},
+            {label:'神经科学', x:250, y:200, r:28},
+            {label:'AI 具身化', x:250, y:400, r:28},
+            {label:'心跳文学部', x:600, y:350, r:28},
+            {label:'阿西莫夫三定律', x:500, y:100, r:28},
+            {label:'Game of Life', x:150, y:300, r:28},
+            {label:'ComfyUI', x:350, y:150, r:28},
+        ];
+
+        samples.forEach(s => {
+            nodes.push({id: nextId++, label: s.label, x: s.x, y: s.y, r: s.r || 28});
+        });
+
+        const sampleEdges = [
+            [1,2],[1,3],[1,4],[1,5],[2,6],[3,7],[4,8],[2,8]
+        ];
+
+        sampleEdges.forEach(([a,b]) => {
+            edges.push({id: nextId++, from: a, to: b});
+        });
+
+        render();
+        centerView();
+        showHelp();
+    }
+
+    // ── Render ──
+    function render() {
+        // Edges
+        edgesG.innerHTML = '';
+        edges.forEach(e => {
+            const a = nodes.find(n => n.id === e.from);
+            const b = nodes.find(n => n.id === e.to);
+            if (!a || !b) return;
+
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', a.x);
+            line.setAttribute('y1', a.y);
+            line.setAttribute('x2', b.x);
+            line.setAttribute('y2', b.y);
+            line.setAttribute('class', 'edge' + (selectedEdge === e.id ? ' selected' : ''));
+            line.dataset.edgeId = e.id;
+
+            line.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                selectEdge(e.id);
+            });
+
+            edgesG.appendChild(line);
+        });
+
+        // Nodes
+        nodesG.innerHTML = '';
+        nodes.forEach(n => {
+            const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            g.setAttribute('class', 'node-group' + (selectedNode === n.id ? ' selected' : ''));
+            g.setAttribute('transform', `translate(${n.x}, ${n.y})`);
+            g.dataset.nodeId = n.id;
+
+            // Glow
+            const glow = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            glow.setAttribute('r', n.r + 6);
+            glow.setAttribute('fill', 'transparent');
+            glow.classList.add('node-glow');
+            g.appendChild(glow);
+
+            // Circle
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('r', n.r);
+            circle.classList.add('node-circle');
+            g.appendChild(circle);
+
+            // Label
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('class', 'node-label');
+            text.textContent = n.label;
+            g.appendChild(text);
+
+            // Events
+            g.addEventListener('mousedown', (ev) => onNodeMouseDown(ev, n));
+
+            g.addEventListener('dblclick', (ev) => {
+                ev.stopPropagation();
+                renameNode(n);
+            });
+
+            nodesG.appendChild(g);
+        });
+
+        updateStatus();
+        updateMinimap();
+    }
+
+    // ── Interaction: Node drag ──
+    function onNodeMouseDown(ev, node) {
+        ev.stopPropagation();
+
+        if (mode === 'connect') {
+            if (!connectFrom) {
+                connectFrom = node;
+                selectedNode = node.id;
+                render();
+            } else if (connectFrom.id !== node.id) {
+                // Check if edge exists
+                const exists = edges.find(e =>
+                    (e.from === connectFrom.id && e.to === node.id) ||
+                    (e.from === node.id && e.to === connectFrom.id)
+                );
+                if (!exists) {
+                    edges.push({id: nextId++, from: connectFrom.id, to: node.id});
+                }
+                connectFrom = null;
+                render();
+            }
+            return;
+        }
+
+        selectedNode = node.id;
+        selectedEdge = null;
+        render();
+
+        const pt = svgPoint(ev);
+        dragging = {node, startX: pt.x - node.x, startY: pt.y - node.y};
+
+        svg.addEventListener('mousemove', onNodeDrag);
+        svg.addEventListener('mouseup', onNodeUp);
+    }
+
+    function onNodeDrag(ev) {
+        if (!dragging) return;
+        const pt = svgPoint(ev);
+        dragging.node.x = pt.x - dragging.startX;
+        dragging.node.y = pt.y - dragging.startY;
+        render();
+    }
+
+    function onNodeUp() {
+        dragging = null;
+        svg.removeEventListener('mousemove', onNodeDrag);
+        svg.removeEventListener('mouseup', onNodeUp);
+    }
+
+    // ── Interaction: Pan ──
+    svg.addEventListener('mousedown', (ev) => {
+        if (ev.button === 1 || (ev.button === 0 && spaceDown)) {
+            panning = true;
+            panStart = {x: ev.clientX - viewOffset.x, y: ev.clientY - viewOffset.y};
+            svg.classList.add('panning');
+            ev.preventDefault();
+        } else if (ev.button === 0 && mode === 'select') {
+            // Click on empty area
+            selectedNode = null;
+            selectedEdge = null;
+            render();
+        }
+    });
+
+    svg.addEventListener('mousemove', (ev) => {
+        if (!panning) return;
+        viewOffset.x = ev.clientX - panStart.x;
+        viewOffset.y = ev.clientY - panStart.y;
+        viewport.setAttribute('transform', `translate(${viewOffset.x}, ${viewOffset.y})`);
+        updateMinimap();
+    });
+
+    svg.addEventListener('mouseup', () => {
+        panning = false;
+        svg.classList.remove('panning');
+    });
+
+    // ── Interaction: Connect temp line ──
+    svg.addEventListener('mousemove', (ev) => {
+        if (mode === 'connect' && connectFrom) {
+            const pt = svgPoint(ev);
+            tempEdgeG.innerHTML = `<line class="temp-edge" x1="${connectFrom.x}" y1="${connectFrom.y}" x2="${pt.x}" y2="${pt.y}"/>`;
+        }
+    });
+
+    // ── Interaction: Double click to add node ──
+    svg.addEventListener('dblclick', (ev) => {
+        if (ev.target === svg || ev.target === viewport || ev.target.closest('#edges')) {
+            const pt = svgPoint(ev);
+            nodes.push({id: nextId++, label: `节点${nextId-1}`, x: pt.x, y: pt.y, r: 28});
+            render();
+        }
+    });
+
+    // ── Interaction: Mouse up (global) ──
+    svg.addEventListener('mouseup', (ev) => {
+        if (mode === 'connect' && connectFrom) {
+            const pt = svgPoint(ev);
+            // Check if dropped on a node
+            const target = nodes.find(n => {
+                const dx = pt.x - n.x, dy = pt.y - n.y;
+                return Math.sqrt(dx*dx + dy*dy) < n.r;
+            });
+            if (target && target.id !== connectFrom.id) {
+                const exists = edges.find(e =>
+                    (e.from === connectFrom.id && e.to === target.id) ||
+                    (e.from === target.id && e.to === connectFrom.id)
+                );
+                if (!exists) {
+                    edges.push({id: nextId++, from: connectFrom.id, to: target.id});
+                }
+            }
+            connectFrom = null;
+            tempEdgeG.innerHTML = '';
+            render();
+        }
+    });
+
+    // ── Interaction: Keyboard ──
+    document.addEventListener('keydown', (ev) => {
+        if (ev.code === 'Space') {
+            spaceDown = true;
+            svg.classList.add('panning');
+        }
+        if (ev.code === 'Delete' || ev.code === 'Backspace') {
+            if (selectedNode !== null) {
+                edges = edges.filter(e => e.from !== selectedNode && e.to !== selectedNode);
+                nodes = nodes.filter(n => n.id !== selectedNode);
+                selectedNode = null;
+                render();
+            }
+            if (selectedEdge !== null) {
+                edges = edges.filter(e => e.id !== selectedEdge);
+                selectedEdge = null;
+                render();
+            }
+        }
+        if (ev.code === 'Escape') {
+            connectFrom = null;
+            selectedNode = null;
+            selectedEdge = null;
+            tempEdgeG.innerHTML = '';
+            render();
+        }
+    });
+
+    document.addEventListener('keyup', (ev) => {
+        if (ev.code === 'Space') {
+            spaceDown = false;
+            svg.classList.remove('panning');
+        }
+    });
+
+    // ── Interaction: Wheel zoom ──
+    let viewScale = 1;
+    svg.addEventListener('wheel', (ev) => {
+        ev.preventDefault();
+        const delta = ev.deltaY > 0 ? 0.9 : 1.1;
+        viewScale *= delta;
+        viewScale = Math.max(0.2, Math.min(3, viewScale));
+        viewport.setAttribute('transform', `translate(${viewOffset.x}, ${viewOffset.y}) scale(${viewScale})`);
+        updateMinimap();
+    }, {passive: false});
+
+    // ── Helpers ──
+    function svgPoint(ev) {
+        const rect = svg.getBoundingClientRect();
+        return {
+            x: (ev.clientX - rect.left - viewOffset.x) / viewScale,
+            y: (ev.clientY - rect.top - viewOffset.y) / viewScale
+        };
+    }
+
+    function selectEdge(id) {
+        selectedEdge = (selectedEdge === id) ? null : id;
+        selectedNode = null;
+        render();
+    }
+
+    function setMode(m) {
+        mode = m;
+        document.getElementById('btnSelect').classList.toggle('active', m === 'select');
+        document.getElementById('btnConnect').classList.toggle('active', m === 'connect');
+        connectFrom = null;
+        tempEdgeG.innerHTML = '';
+        svg.classList.toggle('connecting', m === 'connect');
+        document.getElementById('modeLabel').textContent = m === 'select' ? '🖱️ 模式: 选择' : '🔗 模式: 连线';
+    }
+
+    function addNode() {
+        const cx = (-viewOffset.x + svg.getBoundingClientRect().width/2) / viewScale;
+        const cy = (-viewOffset.y + svg.getBoundingClientRect().height/2) / viewScale;
+        nodes.push({id: nextId++, label: `节点${nextId-1}`, x: cx + (Math.random()-0.5)*100, y: cy + (Math.random()-0.5)*100, r: 28});
+        render();
+    }
+
+    function addCluster() {
+        const cx = (-viewOffset.x + svg.getBoundingClientRect().width/2) / viewScale;
+        const cy = (-viewOffset.y + svg.getBoundingClientRect().height/2) / viewScale;
+        const count = 5;
+        const baseId = nextId;
+        for (let i = 0; i < count; i++) {
+            const angle = (Math.PI * 2 / count) * i;
+            const dist = 80 + Math.random() * 40;
+            nodes.push({id: nextId++, label: `C${baseId}-${i}`, x: cx + Math.cos(angle)*dist, y: cy + Math.sin(angle)*dist, r: 24});
+        }
+        for (let i = 0; i < count; i++) {
+            for (let j = i+1; j < count; j++) {
+                if (Math.random() > 0.5) {
+                    edges.push({id: nextId++, from: baseId+i, to: baseId+j});
+                }
+            }
+        }
+        render();
+    }
+
+    function clearAll() {
+        if (confirm('清空所有节点和连线？')) {
+            nodes = [];
+            edges = [];
+            selectedNode = null;
+            selectedEdge = null;
+            connectFrom = null;
+            render();
+        }
+    }
+
+    function renameNode(node) {
+        const name = prompt('重命名节点:', node.label);
+        if (name !== null && name.trim()) {
+            node.label = name.trim();
+            render();
+        }
+    }
+
+    function updateStatus() {
+        document.getElementById('nodeCount').textContent = nodes.length;
+        document.getElementById('edgeCount').textContent = edges.length;
+        const sn = nodes.find(n => n.id === selectedNode);
+        document.getElementById('selectedLabel').textContent = sn ? `🎯 已选中: ${sn.label}` : '未选中';
+    }
+
+    function centerView() {
+        if (nodes.length === 0) return;
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        nodes.forEach(n => {
+            minX = Math.min(minX, n.x - n.r);
+            minY = Math.min(minY, n.y - n.r);
+            maxX = Math.max(maxX, n.x + n.r);
+            maxY = Math.max(maxY, n.y + n.r);
+        });
+        const rect = svg.getBoundingClientRect();
+        const gw = maxX - minX + 80, gh = maxY - minY + 80;
+        viewScale = Math.min(rect.width / gw, rect.height / gh, 1.5);
+        viewScale = Math.max(0.2, viewScale);
+        const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+        viewOffset.x = rect.width/2 - cx * viewScale;
+        viewOffset.y = rect.height/2 - cy * viewScale;
+        viewport.setAttribute('transform', `translate(${viewOffset.x}, ${viewOffset.y}) scale(${viewScale})`);
+        updateMinimap();
+    }
+
+    // ── Auto layout (force-directed) ──
+    function autoLayout() {
+        if (nodes.length === 0) return;
+
+        const iterations = 200;
+        const k = 120; // ideal distance
+        const gravity = 0.01;
+        const damping = 0.95;
+
+        // Center nodes
+        const cx = nodes.reduce((s,n) => s+n.x, 0) / nodes.length;
+        const cy = nodes.reduce((s,n) => s+n.y, 0) / nodes.length;
+
+        let vel = nodes.map(() => ({x:0, y:0}));
+
+        for (let iter = 0; iter < iterations; iter++) {
+            const temp = 2 * (1 - iter/iterations);
+
+            // Repulsion
+            for (let i = 0; i < nodes.length; i++) {
+                for (let j = i+1; j < nodes.length; j++) {
+                    let dx = nodes[i].x - nodes[j].x;
+                    let dy = nodes[i].y - nodes[j].y;
+                    let dist = Math.sqrt(dx*dx + dy*dy) || 1;
+                    let force = (k*k) / dist;
+                    vel[i].x += (dx/dist) * force;
+                    vel[i].y += (dy/dist) * force;
+                    vel[j].x -= (dx/dist) * force;
+                    vel[j].y -= (dy/dist) * force;
+                }
+            }
+
+            // Attraction
+            edges.forEach(e => {
+                const a = nodes.findIndex(n => n.id === e.from);
+                const b = nodes.findIndex(n => n.id === e.to);
+                if (a < 0 || b < 0) return;
+                let dx = nodes[a].x - nodes[b].x;
+                let dy = nodes[a].y - nodes[b].y;
+                let dist = Math.sqrt(dx*dx + dy*dy) || 1;
+                let force = (dist*dist) / k;
+                vel[a].x -= (dx/dist) * force;
+                vel[a].y -= (dy/dist) * force;
+                vel[b].x += (dx/dist) * force;
+                vel[b].y += (dy/dist) * force;
+            });
+
+            // Gravity
+            nodes.forEach((n, i) => {
+                vel[i].x += (cx - n.x) * gravity;
+                vel[i].y += (cy - n.y) * gravity;
+            });
+
+            // Apply
+            nodes.forEach((n, i) => {
+                vel[i].x *= damping;
+                vel[i].y *= damping;
+                n.x += vel[i].x * temp;
+                n.y += vel[i].y * temp;
+            });
+        }
+
+        render();
+        setTimeout(centerView, 50);
+    }
+
+    // ── Minimap ──
+    function updateMinimap() {
+        if (nodes.length === 0) return;
+        const mmSvg = document.getElementById('minimapSvg');
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        nodes.forEach(n => {
+            minX = Math.min(minX, n.x - n.r);
+            minY = Math.min(minY, n.y - n.r);
+            maxX = Math.max(maxX, n.x + n.r);
+            maxY = Math.max(maxY, n.y + n.r);
+        });
+        const pad = 20;
+        minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+        const gw = maxX - minX || 1, gh = maxY - minY || 1;
+        const mmW = 160, mmH = 100;
+        const scale = Math.min(mmW/gw, mmH/gh);
+
+        let html = `<rect class="minimap-viewport" x="0" y="0" width="${mmW}" height="${mmH}"/>`;
+
+        // Edges
+        edges.forEach(e => {
+            const a = nodes.find(n => n.id === e.from);
+            const b = nodes.find(n => n.id === e.to);
+            if (!a || !b) return;
+            html += `<line class="minimap-edge" x1="${(a.x-minX)*scale}" y1="${(a.y-minY)*scale}" x2="${(b.x-minX)*scale}" y2="${(b.y-minY)*scale}"/>`;
+        });
+
+        // Nodes
+        nodes.forEach(n => {
+            html += `<circle class="minimap-node" cx="${(n.x-minX)*scale}" cy="${(n.y-minY)*scale}" r="${Math.max(2, n.r*scale*0.5)}"/>`;
+        });
+
+        mmSvg.innerHTML = html;
+    }
+
+    // ── Help ──
+    function showHelp() {
+        help.classList.add('show');
+        setTimeout(() => help.classList.remove('show'), 5000);
+    }
+
+    // ── Start ──
+    init();
+    </script>
+
+</body>
+</html>
